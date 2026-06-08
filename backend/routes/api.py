@@ -1267,43 +1267,6 @@ def get_global_dict():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@api_bp.route('/update-global-dict', methods=['POST'])
-def update_global_dict():
-    try:
-        data = request.json
-        wallet_address = data.get('wallet_address')
-        if not wallet_address:
-            return jsonify({"error": "인증 정보가 없습니다."}), 400
-
-        # 프론트엔드에서 넘어온 데이터를 안전하게 문자열(JSON)로 변환
-        stopwords_json = json.dumps(data.get('stopwords', []), ensure_ascii=False)
-        abbrs_json = json.dumps(data.get('abbrs', {}), ensure_ascii=False)
-        inclusions_json = json.dumps(data.get('inclusions', []), ensure_ascii=False)
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM user_settings WHERE wallet_address = ?", (wallet_address,))
-        
-        if cursor.fetchone():
-            # 기존 유저: UPDATE
-            cursor.execute("""
-                UPDATE user_settings 
-                SET custom_stopwords = ?, custom_abbrs = ?, custom_inclusions = ? 
-                WHERE wallet_address = ?
-            """, (stopwords_json, abbrs_json, inclusions_json, wallet_address))
-        else:
-            # 신규 유저: INSERT
-            cursor.execute("""
-                INSERT INTO user_settings (wallet_address, custom_stopwords, custom_abbrs, custom_inclusions) 
-                VALUES (?, ?, ?, ?)
-            """, (wallet_address, stopwords_json, abbrs_json, inclusions_json))
-            
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "전역 사전 DB 업데이트 완료"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-        
 # ==========================================
 # 💡 사용자 체크포인트(진행 상태) 관리 API
 # ==========================================
