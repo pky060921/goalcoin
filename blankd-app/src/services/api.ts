@@ -124,15 +124,42 @@ export const api = {
     if (!res.ok) throw new Error("항목 이동 실패");
     return res.json();
   },
-  async getStopwords(address: string) {
-    const res = await fetch(`${BASE_URL}/get-stopwords?wallet_address=${address}`);
-    return res.json();
+  
+  // 💡 [신규 교체] 통합 글로벌 단어장 API (제외 단어, 필수 단어, 약어)
+  async getGlobalDict(address: string) {
+    try {
+      const res = await fetch(`${BASE_URL}/get-global-dict?wallet_address=${address}`);
+      if (!res.ok) throw new Error("글로벌 사전 동기화 실패");
+      return await res.json();
+    } catch (error) {
+      console.error("[진단: api.ts] getGlobalDict 통신 에러 발생:", error);
+      throw error;
+    }
   },
-  async updateStopwords(address: string, stopwords: any) {
-    const res = await fetch(`${BASE_URL}/update-stopwords`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet_address: address, stopwords })
-    });
-    return res.json();
+  async updateGlobalDict(address: string, dictData: any) {
+    try {
+      const res = await fetch(`${BASE_URL}/update-global-dict`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_address: address, ...dictData })
+      });
+      if (!res.ok) throw new Error("글로벌 사전 업데이트 실패");
+      return await res.json();
+    } catch (error) {
+      console.error("[진단: api.ts] updateGlobalDict 통신 에러 발생:", error);
+      throw error;
+    }
   }
 };
+
+// 💡 런타임 오류 진단 코드 (App.tsx 등에서 API 객체가 정상 조립되었는지 콘솔로 실시간 확인)
+if (typeof window !== 'undefined') {
+  try {
+    if (typeof api.getGlobalDict !== 'function') {
+      console.error("🚨 [치명적 진단 에러] api.getGlobalDict가 함수로 등록되지 않았습니다! api.ts 내보내기 구조를 확인하세요.");
+    } else {
+      console.log("🚀 [진단 완료] api.ts 모듈 로드 성공 및 getGlobalDict 함수 정상 등록됨.");
+    }
+  } catch (e) {
+    console.error("🚨 [진단 에러] 진단 스크립트 실행 중 오류 발생:", e);
+  }
+}
