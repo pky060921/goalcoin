@@ -18,6 +18,12 @@ export const EnhanceTab = ({ savedCards, colCount, viewMode, setActiveCard, setA
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
+  // 💡 [추가] 마지막으로 저장한 카드의 ID를 추적하는 상태
+  const [lastEditedId, setLastEditedId] = useState<string | null>(() => {
+    try { return localStorage.getItem('blankd_last_edited_enhance_id'); } 
+    catch(e) { return null; }
+  });
+
   const [activeTool, setActiveTool] = useState<'editor' | 'smart' | null>(() => {
     return typeof window !== 'undefined' && window.innerWidth < 768 ? 'smart' : 'editor';
   });
@@ -151,15 +157,10 @@ export const EnhanceTab = ({ savedCards, colCount, viewMode, setActiveCard, setA
     const abbrevValues = Object.values(globalDict.abbrs || {}); 
     
     const wordsToUnbracket = [...stopWords, ...abbrevKeys];
-    
-    // 💡 [핵심 수정] DB 찌꺼기에 남아있는 약어(짧은 정답)가 빈칸으로 뚫리는 것을 2중 차단!
     const includeWords = Array.from(new Set([
         ...(globalDict.inclusions || []),
         ...(abbrevValues as string[])
-    ]))
-    .filter((w: any) => typeof w === 'string' && w.trim() !== '')
-    .filter(w => !abbrevKeys.some(key => key.replace(/\s+/g, '') === w.replace(/\s+/g, ''))) // 💡 약어는 절대 포함 안 되게 거름
-    .sort((a: any, b: any) => b.length - a.length);
+    ])).filter((w: any) => typeof w === 'string' && w.trim() !== '').sort((a: any, b: any) => b.length - a.length);
 
     let currentText = restContent;
 
@@ -353,6 +354,8 @@ export const EnhanceTab = ({ savedCards, colCount, viewMode, setActiveCard, setA
 
   const handleSaveEdit = async (card: any) => {
     setIsSaving(true); setErrorMsg(null);
+    let finalSavedId = card.id; // 💡 저장 성공 시 추적할 ID를 담을 변수
+    
     try {
       let sanitizedContent = editContent.replace(/\[+/g, '[').replace(/\]+/g, ']'); 
 
@@ -378,6 +381,7 @@ export const EnhanceTab = ({ savedCards, colCount, viewMode, setActiveCard, setA
       if (isTemp && card.insertAfterId) {
         const resData = await res.json().catch(()=>({}));
         const newCardId = resData.card_id || resData.id;
+        finalSavedId = newCardId || card.id;
         
         const listRes = await fetch(`https://api.blankd.top/api/my-cards?wallet_address=${safeAddress}&t=${Date.now()}`);
         const listData = await listRes.json();
@@ -385,6 +389,7 @@ export const EnhanceTab = ({ savedCards, colCount, viewMode, setActiveCard, setA
         const folderCards = allCards.filter((c:any) => c.folder_name === card.folder_name);
         
         let createdCard = newCardId ? folderCards.find((c:any) => c.id === newCardId) : folderCards.filter((c:any) => c.content === sanitizedContent).pop();
+        if (createdCard) finalSavedId = createdCard.id;
         
         if (createdCard) {
             const otherFolderCards = folderCards.filter((c:any) => c.id !== createdCard.id);
@@ -404,6 +409,11 @@ export const EnhanceTab = ({ savedCards, colCount, viewMode, setActiveCard, setA
       if (typeof loadAllData === 'function') await loadAllData();
       setEditingId(null); 
       setShowJeonggwanSelector(false);
+
+      // 💡 [v 표시 연동] 성공적으로 수정이 완료되면 로컬스토리지와 상태 업데이트
+      setLastEditedId(String(finalSavedId));
+      localStorage.setItem('blankd_last_edited_enhance_id', String(finalSavedId));
+
     } catch (error: any) { setErrorMsg(error.message || "서버 통신 실패"); } finally { setIsSaving(false); }
   };
 
@@ -558,6 +568,9 @@ export const EnhanceTab = ({ savedCards, colCount, viewMode, setActiveCard, setA
                                       titleLen > 15 ? 'text-[11px] sm:text-[12px] tracking-tighter' : 
                                       'text-[12px] sm:text-[13px] tracking-tight';
 
+                  // 💡 이 카드가 마지막으로 수정된 카드인지 판별
+                  const isLastEdited = String(lastEditedId) === String(card.id);
+
                   return (
                     <div key={card.id} id={`enhance-card-${card.id}`} className={`relative transition-all w-full ${colClass}`}>
                       {editingId === card.id ? (
@@ -639,9 +652,13 @@ export const EnhanceTab = ({ savedCards, colCount, viewMode, setActiveCard, setA
                       ) : (
                         <button {...createLongPressHandlers(() => (card.id))} onClick={(e) => { e.stopPropagation(); if (typeof setActiveCard === 'function') setActiveCard(card); }} className={`w-full p-1.5 sm:p-2 rounded-sm border flex flex-col justify-center gap-0.5 ${movingId === card.id ? "border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)] bg-blue-900/30 ring-2 ring-blue-500/50" : hasWrong ? "border-red-500/40 bg-red-900/20" : "border-indigo-500/30 bg-indigo-900/20 hover:bg-indigo-900/40"} shadow-sm transition-all duration-200`}>
                           
-                          <div className="flex w-full overflow-hidden mb-1">
+                          <div className="flex w-full overflow-hidden mb-1 items-center">
                             <div className={`${titleColor} font-bold ${titleSizing} w-full text-left truncate leading-tight`} title={displayTitle}>
                               {displayTitle}
+                              {/* 💡 [표시] 마지막으로 수정한 카드 v 체크 표시 */}
+                              {isLastEdited && (
+                                <span className="ml-1.5 inline-flex items-center justify-center text-green-400 font-black text-[9px] bg-green-900/40 px-1 py-0.5 rounded-sm border border-green-500/30 align-middle shadow-sm" title="마지막으로 수정한 카드">v</span>
+                              )}
                             </div>
                           </div>
                           
